@@ -9,12 +9,12 @@ error FundMe__NotOwner();
 contract FundMe {
     using PriceConverter for uint256;
 
-    mapping(address => uint256) private s_addressToAmountFunded;
+    mapping(address funder => uint256 amountFunded) private s_addressToAmountFunded;
     address[] private s_funders;
+    uint256 private s_totalFunded;
 
-    // Could we make this constant?  /* hint: no! We should make it immutable! */
-    address private /* immutable */ i_owner;
-    uint256 public constant MINIMUM_USD = 5 * 10 ** 18;
+    address private immutable i_owner;
+    uint256 public constant MINIMUM_USD = 5 * 10 ** 18;  // in wei
     AggregatorV3Interface private s_priceFeed;  //s_ is storage variable
     
     constructor(address priceFeed) {
@@ -27,18 +27,16 @@ contract FundMe {
         // require(PriceConverter.getConversionRate(msg.value) >= MINIMUM_USD, "You need to spend more ETH!");
         s_addressToAmountFunded[msg.sender] += msg.value;
         s_funders.push(msg.sender);
+        s_totalFunded += msg.value;
     }
-    
-    function getVersion() public view returns (uint256){
-        return s_priceFeed.version();
-    }
-    
+
     modifier onlyOwner {
         // require(msg.sender == owner);
-        if (msg.sender != i_owner) revert FundMe__NotOwner();
+        if (msg.sender != i_owner) {
+            revert FundMe__NotOwner(); }
         _;
     }
-    
+
     function withdraw() public onlyOwner {
         // for loop: for(starting index, ending index, step amount)
         for (uint256 funderIndex=0; funderIndex < s_funders.length; funderIndex++){
@@ -60,28 +58,13 @@ contract FundMe {
         (bool callSuccess, ) = payable(msg.sender).call{value: address(this).balance}("");
         require(callSuccess, "Call failed");
     }
-    // Explainer from: https://solidity-by-example.org/fallback/
-    // Ether is sent to contract
-    //      is msg.data empty?
-    //          /   \ 
-    //         yes  no
-    //         /     \
-    //    receive()?  fallback() 
-    //     /   \ 
-    //   yes   no
-    //  /        \
-    //receive()  fallback()
 
-    fallback() external payable {
-        fund();
+    function getTotalFunded() external view returns (uint256) {
+        return s_totalFunded;
     }
 
-    receive() external payable {
-        fund();
-    }
-
-    function getAddressToAmountFunded(address fundingAddress) external view returns (uint256) {
-        return s_addressToAmountFunded[fundingAddress];
+    function getAddressToAmountFunded(address funderAddress) external view returns (uint256) {
+        return s_addressToAmountFunded[funderAddress];
     }
 
     function getFunder(uint256 index) external view returns(address){
@@ -92,4 +75,7 @@ contract FundMe {
         return i_owner;
     }
 
+    function getVersion() public view returns (uint256){
+        return s_priceFeed.version();
+    }
 }
